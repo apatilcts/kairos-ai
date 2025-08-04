@@ -20,7 +20,7 @@ class ChatService:
         # Configure Gemini API (fallback)
         if settings.gemini_api_key:
             genai.configure(api_key=settings.gemini_api_key)
-            self.gemini_model = genai.GenerativeModel('gemini-pro')
+            self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
             print("Gemini API initialized")
         
         # Determine which model to use
