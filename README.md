@@ -1,4 +1,5 @@
-# AI-Assisted Document & Strategy Generator
+<<<<<<< HEAD
+# KairosAI - Strategic Document Intelligence Platform
 
 An AI-powered platform that transforms how product managers, consultants, and business analysts interact with project documents. Upload unstructured source materials and leverage conversational AI to analyze, query, and generate structured strategic documents like MVPs, PRDs, and RFPs.
 
@@ -146,3 +147,7 @@ Once the backend is running, visit:
 ## 📄 License
 
 This project is licensed under the MIT License. 
+=======
+# kairos-ai
+kairos-ai
+>>>>>>> c42cba4a2e0d86f9a39dd541c09d4838ecb0bf74
