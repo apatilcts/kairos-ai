@@ -87,4 +87,20 @@ class GeneratedDocumentResponse(GeneratedDocumentBase):
     updated_at: Optional[datetime] = None
     
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+# Document Factory schemas
+class GenerateRequest(BaseModel):
+    project_id: int
+    user_prompt: str
+    context_documents: Optional[List[str]] = None
+    user_preferences: Optional[dict] = None
+
+class GenerateResponse(BaseModel):
+    success: bool
+    document_id: int
+    title: str
+    content: str
+    audience_versions: Optional[dict] = {}
+    metadata: dict
+    processing_info: dict 

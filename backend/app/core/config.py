@@ -3,7 +3,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "sqlite:///./ai_mvp.db"
+    database_url: str = "sqlite:///./backend/ai_mvp.db"
     
     # AI Models
     anthropic_api_key: str = ""
@@ -32,5 +32,7 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        # Ensure case-insensitive environment variable matching
+        case_sensitive = False
 
 settings = Settings() 

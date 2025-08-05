@@ -208,7 +208,7 @@ def get_generated_documents(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     query = db.query(GeneratedDocument).filter(
         GeneratedDocument.project_id == project_id,
         GeneratedDocument.is_latest == True

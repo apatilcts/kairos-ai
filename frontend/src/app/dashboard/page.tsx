@@ -18,7 +18,8 @@ import {
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/Button'
-import { projectsApi, documentsApi, chatApi, chatGenerationsApi, type Project, type ProjectWithDocuments } from '@/lib/api'
+import CreateProjectModal from '@/components/CreateProjectModal'
+import { projectsApi, documentsApi, chatApi, chatGenerationsApi, documentFactoryApi, generatedDocumentsApi, type Project, type ProjectWithDocuments, type GeneratedDocument } from '@/lib/api'
 
 function Header({ onNewProject, onNavigate }: { 
   onNewProject: () => void,
@@ -399,7 +400,27 @@ function DocumentsTab({ project }: { project: ProjectWithDocuments }) {
 function GenerationsTab({ project }: { project: ProjectWithDocuments }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState<string | null>(null);
-  const [generatedDocs, setGeneratedDocs] = useState<any[]>([]);
+  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
+  const [modalDocument, setModalDocument] = useState<{ type: string; content: string; title: string; factoryData?: any } | null>(null);
+
+  // Load generated documents for this project
+  const loadGeneratedDocuments = async () => {
+    try {
+      console.log(`🔄 Loading generated documents for project ${project.id}...`);
+      const response = await generatedDocumentsApi.getAll(project.id);
+      console.log(`✅ Loaded ${response.data.length} generated documents`);
+      setGeneratedDocs(response.data);
+    } catch (error) {
+      console.error('❌ Failed to load generated documents:', error);
+    }
+  };
+
+  // Load documents when component mounts or project changes
+  useEffect(() => {
+    if (project.id) {
+      loadGeneratedDocuments();
+    }
+  }, [project.id]);
 
   const generateDocument = async (type: string) => {
     // Prevent multiple simultaneous generations
@@ -412,40 +433,75 @@ function GenerationsTab({ project }: { project: ProjectWithDocuments }) {
     setGeneratingType(type);
     
     try {
-      console.log(`🚀 Generating ONLY ${type} document for project ${project.id}...`);
+      console.log(`🚀 Generating ${type} document using AI Document Factory for project ${project.id}...`);
       let response;
       
-      // Call ONLY the specific API for the requested type
+      // Use the Document Factory for structured, high-quality document generation
+      const documentRequest = {
+        project_id: project.id,
+        user_prompt: `Create a comprehensive ${type.replace('-', ' ')} document based on the project context and uploaded documents. This should be a professional, executive-ready document.`,
+        context_documents: [], // Will be enhanced with actual context in the future
+        user_preferences: {
+          style: 'professional',
+          length: 'comprehensive',
+          audience: 'executive'
+        }
+      };
+      
       switch (type) {
         case 'mvp':
-          console.log(`📋 Calling MVP generation API...`);
-          response = await chatGenerationsApi.generateMVP(project.id, `Generate a comprehensive MVP (Minimum Viable Product) plan for this project. Include: 1) Problem Definition, 2) Target Market Analysis, 3) Core Feature Set (minimum viable features), 4) Technical Requirements, 5) Development Roadmap, 6) Success Metrics & KPIs, 7) Go-to-Market Strategy`);
+          console.log(`📋 Calling Document Factory MVP generation...`);
+          response = await documentFactoryApi.generateMVP(documentRequest);
           break;
           
         case 'prd':
-          console.log(`📋 Calling PRD generation API...`);
-          response = await chatGenerationsApi.generatePRD(project.id, `Generate a detailed Product Requirements Document (PRD) for this project. Include: 1) Executive Summary, 2) Product Overview & Vision, 3) User Stories & Use Cases, 4) Functional Requirements, 5) Technical Specifications, 6) UI/UX Requirements, 7) Implementation Timeline, 8) Success Criteria`);
+          console.log(`📋 Calling Document Factory PRD generation...`);
+          response = await documentFactoryApi.generatePRD(documentRequest);
           break;
           
         case 'business-case':
-          console.log(`📋 Calling Business Case generation API...`);
-          response = await chatGenerationsApi.generateRFP(project.id, `Generate a comprehensive Business Case document for this project. Include: 1) Executive Summary, 2) Problem Statement, 3) Proposed Solution, 4) ROI Analysis & Financial Projections, 5) Cost-Benefit Analysis, 6) Risk Assessment, 7) Resource Requirements, 8) Implementation Timeline, 9) Expected Business Impact`);
+          console.log(`📋 Calling Document Factory Business Case generation...`);
+          response = await documentFactoryApi.generateBusinessCase(documentRequest);
           break;
           
         case 'user-personas':
-          console.log(`📋 Calling User Personas generation API...`);
-          response = await chatGenerationsApi.generateMVP(project.id, `Generate detailed User Personas for this project. Include: 1) Primary Persona Demographics (age, role, background), 2) Goals & Motivations, 3) Pain Points & Challenges, 4) Behavioral Patterns, 5) Technology Usage, 6) User Journey Mapping, 7) Use Case Scenarios, 8) Communication Preferences`);
+          console.log(`📋 Calling Document Factory User Personas generation...`);
+          response = await documentFactoryApi.generateUserPersonas(documentRequest);
+          break;
+          
+        case 'rfp':
+          console.log(`📋 Calling Document Factory RFP generation...`);
+          response = await documentFactoryApi.generateRFP(documentRequest);
+          break;
+          
+        case 'gtm-strategy':
+          console.log(`📋 Calling Document Factory GTM Strategy generation...`);
+          response = await documentFactoryApi.generateGTMStrategy(documentRequest);
           break;
           
         default:
-          console.log(`📋 Calling general generation API for ${type}...`);
-          response = await chatGenerationsApi.generateAll(project.id, `Generate a ${type} document for this project`);
+          // Fallback to legacy API
+          console.log(`📋 Fallback to legacy API for ${type}...`);
+          const legacyResponse = await chatGenerationsApi.generateAll(project.id, `Generate a ${type} document for this project`);
+          response = { data: { content: legacyResponse.data.response, title: `Generated ${type}` } };
       }
       
-      console.log(`✅ Successfully generated ${type}:`, response.data);
+      console.log(`✅ Document Factory generated ${type}:`, response.data);
       
-      // Display the actual generated content in a proper modal
-      showGeneratedDocument(type, response.data.response);
+      // Display the high-quality generated content
+      if (response.data.content) {
+        setModalDocument({
+          type,
+          content: response.data.content,
+          title: response.data.title || `${type.toUpperCase().replace('-', ' ')} Generated Successfully!`,
+          factoryData: response.data
+        });
+        
+        // Reload the generated documents list to show the new document
+        await loadGeneratedDocuments();
+      } else {
+        throw new Error('No content received from Document Factory');
+      }
       
     } catch (error) {
       console.error(`❌ Failed to generate ${type}:`, error);
@@ -456,26 +512,34 @@ function GenerationsTab({ project }: { project: ProjectWithDocuments }) {
     }
   };
 
-  const showGeneratedDocument = (type: string, content: string) => {
-    const modal = document.createElement('div');
-    modal.innerHTML = `
-      <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;">
-        <div style="background: white; max-width: 80%; max-height: 80%; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow: hidden;">
-          <div style="background: #10B981; color: white; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin: 0; font-size: 18px; font-weight: bold;">✅ ${type.toUpperCase().replace('-', ' ')} Generated Successfully!</h3>
-            <button onclick="this.closest('div').parentElement.remove()" style="background: none; border: none; color: white; cursor: pointer; font-size: 24px; padding: 0;">×</button>
-          </div>
-          <div style="padding: 24px; max-height: 60vh; overflow-y: auto;">
-            <pre style="white-space: pre-wrap; font-family: system-ui; line-height: 1.6; color: #333; margin: 0;">${content}</pre>
-          </div>
-          <div style="border-top: 1px solid #e5e7eb; padding: 16px; background: #f9fafb; display: flex; justify-content: flex-end; gap: 12px;">
-            <button onclick="navigator.clipboard.writeText(\`${content.replace(/`/g, '\\`')}\`).then(() => alert('Copied to clipboard!'))" style="background: #6B7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">📋 Copy</button>
-            <button onclick="this.closest('div').parentElement.parentElement.remove()" style="background: #10B981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">Close</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
+  const copyToClipboard = async (content: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content);
+        alert('✅ Copied to clipboard!');
+      } else {
+        // Fallback for when clipboard API is not available
+        const textArea = document.createElement('textarea');
+        textArea.value = content;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          alert('✅ Copied to clipboard!');
+        } catch (err) {
+          console.error('Copy failed:', err);
+          alert('❌ Copy failed. Please select and copy manually.');
+        }
+        document.body.removeChild(textArea);
+      }
+    } catch (err) {
+      console.error('Copy operation failed:', err);
+      alert('❌ Copy failed. Please select and copy manually.');
+    }
   };
 
   const showErrorNotification = (type: string, error: any) => {
@@ -569,14 +633,115 @@ function GenerationsTab({ project }: { project: ProjectWithDocuments }) {
                   <p className="text-sm text-gray-500">{new Date(doc.created_at).toLocaleDateString()}</p>
                 </div>
                 <div className="flex space-x-2">
-                  <Button size="sm" className="btn-secondary">View</Button>
-                  <Button size="sm" className="btn-primary">Download</Button>
+                  <Button 
+                    size="sm" 
+                    className="btn-secondary"
+                    onClick={() => setModalDocument({
+                      type: doc.document_type,
+                      content: doc.content,
+                      title: doc.title,
+                      factoryData: doc
+                    })}
+                  >
+                    View
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="btn-primary"
+                    onClick={() => {
+                      // Add download functionality
+                      const blob = new Blob([doc.content], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${doc.title}.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Document Modal */}
+      {modalDocument && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+          onClick={() => setModalDocument(null)}
+        >
+          <div 
+            className="bg-white max-w-4xl max-h-[85vh] rounded-lg shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-green-500 text-white p-4 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold">✅ {modalDocument.title}</h3>
+                {modalDocument.factoryData?.metadata && (
+                  <p className="text-sm opacity-90">
+                    Generated via AI Document Factory • {modalDocument.factoryData.metadata.word_count || 0} words • {modalDocument.factoryData.metadata.ai_provider || 'AI'}
+                  </p>
+                )}
+              </div>
+              <button 
+                onClick={() => setModalDocument(null)}
+                className="text-white hover:text-gray-200 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Multi-audience info */}
+            {modalDocument.factoryData?.audience_versions && Object.keys(modalDocument.factoryData.audience_versions).length > 0 && (
+              <div className="bg-blue-50 border-b border-gray-200 p-3">
+                <p className="text-sm text-blue-700 font-medium">
+                  📊 Multi-Audience Document: Available for {Object.keys(modalDocument.factoryData.audience_versions).join(', ')}
+                </p>
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <pre className="whitespace-pre-wrap font-system text-gray-800 leading-relaxed">
+                {modalDocument.content
+                  .replace(/Warning:.*AI service not configured.*?\n?/gi, '')
+                  .replace(/AI service not configured.*?\n?/gi, '')
+                  .replace(/^Warning:.*?\n/gim, '')
+                  .trim()}
+              </pre>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 p-4 bg-gray-50 flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                {modalDocument.factoryData?.metadata?.sections_count && `${modalDocument.factoryData.metadata.sections_count} sections • `}
+                {modalDocument.factoryData?.processing_info?.ai_provider ? `AI: ${modalDocument.factoryData.processing_info.ai_provider}` : 'Enhanced AI Processing'}
+              </div>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => copyToClipboard(modalDocument.content)}
+                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm"
+                >
+                  📋 Copy
+                </button>
+                <button 
+                  onClick={() => setModalDocument(null)}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -690,6 +855,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const fetchProjects = async () => {
     console.log('🔄 Dashboard: Starting to fetch projects...');
@@ -731,15 +897,14 @@ export default function DashboardPage() {
     }
   };
 
-  const handleNewProject = async () => {
-    try {
-      const response = await projectsApi.create({ name: 'Untitled Project' });
-      await fetchProjects();
-      handleSelectProject(response.data);
-    } catch (err) {
-      setError('Failed to create a new project.');
-      console.error(err);
-    }
+  const handleNewProject = () => {
+    setShowCreateModal(true);
+  };
+
+  const handleProjectCreated = async (newProject: Project) => {
+    setShowCreateModal(false);
+    await fetchProjects();
+    handleSelectProject(newProject);
   };
 
   const handleTabChange = (tab: string) => {
@@ -752,9 +917,20 @@ export default function DashboardPage() {
     console.log(`Navigating to ${section} section`);
   };
 
-  const handleViewProject = (project: Project) => {
-    setActiveTab('overview');
+  const handleViewProject = async (project: Project) => {
     console.log(`Viewing project: ${project.name}`);
+    
+    // First, load the project with all its documents
+    try {
+      const response = await projectsApi.get(project.id);
+      setSelectedProject(response.data);
+      
+      // Navigate to the generations tab to show the generated documents
+      setActiveTab('generations');
+      console.log('Navigating to Generated Documents tab');
+    } catch (error) {
+      console.error('Error loading project for viewing:', error);
+    }
   };
 
   const handleGenerateDocuments = (project: Project) => {
@@ -791,6 +967,14 @@ export default function DashboardPage() {
           onTabChange={handleTabChange}
         />
       </div>
+      
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <CreateProjectModal
+          onClose={() => setShowCreateModal(false)}
+          onProjectCreated={handleProjectCreated}
+        />
+      )}
     </div>
   );
 }
